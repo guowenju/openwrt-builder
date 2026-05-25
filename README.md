@@ -1,6 +1,6 @@
 # 编译 OpenWrt
 
-- 16MiB/256MiB
+- 16MiB/512MiB
 
 ## 配置
 

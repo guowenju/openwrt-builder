@@ -112,6 +112,35 @@ jobs:
     name: Publish GitHub Release
 
     steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v6
+
+      - name: Read rootfs part size
+        id: firmware_config
+        run: |
+          ROOTFS_PARTSIZE="$(sed -n 's/^CONFIG_TARGET_ROOTFS_PARTSIZE=//p' .config | tail -n 1)"
+          if [ -z "$ROOTFS_PARTSIZE" ]; then
+            echo "❌ 未在 .config 中找到 CONFIG_TARGET_ROOTFS_PARTSIZE"
+            exit 1
+          fi
+
+          TARGET="$(sed -n 's/^CONFIG_TARGET_\([^_=][^=]*\)=y$/\1/p' .config | head -n 1)"
+          SUBTARGET="$(sed -n "s/^CONFIG_TARGET_${TARGET}_\([^_=][^=]*\)=y$/\1/p" .config | grep -v '^DEVICE_' | head -n 1)"
+          DEVICE="$(sed -n "s/^CONFIG_TARGET_${TARGET}_${SUBTARGET}_DEVICE_\(.*\)=y$/\1/p" .config | head -n 1)"
+
+          if [ -z "$TARGET" ] || [ -z "$SUBTARGET" ]; then
+            echo "❌ 未在 .config 中找到 CONFIG_TARGET_* 目标平台"
+            exit 1
+          fi
+
+          TARGET_PLATFORM="${TARGET}/${SUBTARGET}"
+          if [ -n "$DEVICE" ]; then
+            TARGET_PLATFORM="${TARGET_PLATFORM}/${DEVICE}"
+          fi
+
+          echo "rootfs_partsize=${ROOTFS_PARTSIZE}" >> "$GITHUB_OUTPUT"
+          echo "target_platform=${TARGET_PLATFORM}" >> "$GITHUB_OUTPUT"
+
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
@@ -125,6 +154,12 @@ jobs:
           files: ./downloads/**/*.img.gz
           body: |
             📦 自动发布版本 ${{ inputs.tag }}
+
+            固件信息:
+            - 目标平台: ${{ steps.firmware_config.outputs.target_platform }}
+            - RootFS 分区大小: ${{ steps.firmware_config.outputs.rootfs_partsize }} MiB
+            - 构建编号: ${{ github.run_number }}
+            - 提交: ${{ github.sha }}
 
             ${{ inputs.message }}
         env:
